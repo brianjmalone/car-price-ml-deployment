@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.DS_Store
+fast-api-car-price/models/model.pkl
+.env
+.streamlit/
