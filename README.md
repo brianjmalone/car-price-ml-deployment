@@ -90,6 +90,40 @@ CMD ["uvicorn", "src.main:api", "--host", "0.0.0.0", "--port", "8000"]
 - Traditional pip: 3-4 minutes
 - Layer caching optimizes for code iteration
 
+### Deployment Architecture: Pre-built Images vs Build-on-Deploy
+
+This project uses a **container registry approach** rather than building directly on the deployment platform.
+
+**Architecture chosen:**
+1. Build Docker image locally or in CI/CD
+2. Push to Docker Hub (`docker.io/bjmalone724/car-price-api:v1`)
+3. Render pulls pre-built image for deployment
+
+**Alternative approach (not used):**
+- Push source code to GitHub
+- Render clones repository and builds Docker image on their infrastructure
+- No container registry required
+
+**Why I chose this approach:**
+
+**Advantages:**
+- **Faster deployments**: Image is pre-built, Render only pulls and runs (seconds vs minutes)
+- **Build once, deploy anywhere**: Same image can be deployed to multiple platforms (AWS, GCP, Azure)
+- **Consistent environments**: Eliminates "works on my machine" problems
+- **Testing in production**: Can run the exact production image locally before deploying
+- **Enables CI/CD**: Automated pipelines can build, test, and push images (Week 3 requirement)
+- **Version control**: Tag images (`v1`, `v2`, `latest`) for easy rollback
+- **Resource efficiency**: Build happens on your machine or CI/CD runners, not on free-tier deployment platform
+
+**Trade-offs:**
+- Requires Docker Hub account (or alternative registry like GitHub Container Registry)
+- More complex initial setup compared to "git push to deploy"
+- Must rebuild and push for every code change
+- Need to manage image versioning strategy
+
+**Industry context:** This approach mirrors production practices at companies running Kubernetes or containerized workloads. Building on the deployment platform is simpler for prototypes but doesn't scale to multi-environment deployments (dev/staging/production).
+
+
 ### Monorepo Structure
 
 Used a monorepo to keep API and frontend code together rather than separate repositories.
