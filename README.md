@@ -1,0 +1,269 @@
+# Car Price Prediction - End-to-End ML Deployment
+
+A production deployment of a machine learning model using FastAPI, Docker, and Streamlit. This project demonstrates the complete pipeline from model serving to user-facing application.
+
+## Live Demo
+
+- **Web Interface**: https://car-price-ml-deployment-gxj6x73mff2phxcf8fokyq.streamlit.app
+
+## Architecture
+
+```
+User → Streamlit Frontend → FastAPI Backend → XGBoost Model → Prediction
+        (Streamlit Cloud)      (Render)
+```
+
+The system consists of two independently deployed services:
+- **Backend API**: Containerized FastAPI application serving model predictions
+- **Frontend**: Streamlit web application providing user interface
+
+## Project Structure
+
+```
+car-price-ml-deployment/
+├── fast-api-car-price/          # Backend API
+│   ├── src/
+│   │   ├── __init__.py
+│   │   └── main.py              # FastAPI application
+│   ├── models/
+│   │   └── model.pkl            # Trained XGBoost model (gitignored)
+│   ├── Dockerfile               # Multi-stage container build
+│   ├── requirements.txt         # Unpinned dependencies
+│   └── requirements-frozen.txt  # Version snapshot
+└── streamlit-car-price/         # Frontend application
+    ├── app.py                   # Streamlit interface
+    └── requirements.txt
+```
+
+## Technology Stack
+
+### Backend
+- **FastAPI**: Async Python web framework with automatic OpenAPI documentation
+- **XGBoost**: Pre-trained gradient boosting model
+- **Docker**: Container runtime with multi-stage builds
+- **uv**: Ultra-fast Python package installer (10-100x faster than pip)
+- **Render**: Cloud platform for containerized deployments
+
+### Frontend
+- **Streamlit**: Python framework for data applications
+- **Streamlit Community Cloud**: Free hosting for Streamlit apps
+
+## Key Technical Decisions
+
+### Unpinned Dependencies
+
+The `requirements.txt` uses unpinned versions:
+```
+fastapi
+uvicorn[standard]
+xgboost
+```
+
+**Rationale**: The model was trained with unknown library versions. Pinned dependencies caused binary incompatibility errors (numpy version mismatches, sklearn warnings). Unpinned dependencies allowed `uv` to resolve compatible versions automatically.
+
+**Trade-off**: Reproducibility vs compatibility. This worked for development but should be frozen for production using:
+```bash
+docker run --rm bjmalone724/car-price-api:v1 pip list --format=freeze > requirements-frozen.txt
+```
+
+### Multi-Stage Docker Build with uv
+
+```dockerfile
+FROM python:3.11-slim
+
+# Install uv package manager
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+COPY requirements.txt .
+RUN uv pip install --system -r requirements.txt
+
+COPY models/ ./models/
+COPY src/ ./src/
+
+EXPOSE 8000
+CMD ["uvicorn", "src.main:api", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+**Benefits**:
+- Build time: 49 seconds (first build), 0.6 seconds (code-only changes)
+- Traditional pip: 3-4 minutes
+- Layer caching optimizes for code iteration
+
+### Monorepo Structure
+
+Used a monorepo to keep API and frontend code together rather than separate repositories.
+
+**Advantages**:
+- Single source of truth
+- Easier to track integration changes
+- Better for portfolios (shows full stack)
+
+**Disadvantages**:
+- Each service still deploys independently
+- Slightly more complex CI/CD setup
+
+### Health Check Endpoint
+
+```python
+@api.get("/health")
+async def health():
+    return {"status": "healthy"}
+```
+
+**Purpose**: Cloud platforms use health checks to verify service availability. Render defaults to `/healthz` (Kubernetes convention), but `/health` was chosen for simplicity.
+
+## Deployment Process
+
+### Backend (FastAPI on Render)
+
+1. Build Docker image:
+```bash
+docker build -t bjmalone724/car-price-api:v1 .
+```
+
+2. Push to Docker Hub:
+```bash
+docker push bjmalone724/car-price-api:v1
+```
+
+3. Deploy on Render:
+   - Service type: Web Service
+   - Image: `docker.io/bjmalone724/car-price-api:v1`
+   - Port: 8000
+   - Health check path: `/health`
+
+**Free tier limitation**: Service spins down after 15 minutes of inactivity. First request after sleep has 30-50 second cold start.
+
+### Frontend (Streamlit on Streamlit Cloud)
+
+1. Push code to GitHub
+2. Connect Streamlit Cloud to repository
+3. Configure deployment:
+   - Main file: `streamlit-car-price/app.py`
+   - Branch: `main`
+
+Streamlit Cloud automatically redeploys on git push.
+
+## Local Development
+
+### Run API Locally
+
+```bash
+cd fast-api-car-price
+docker build -t car-price-api .
+docker run -p 8000:8000 car-price-api
+
+# Test endpoint
+curl -X POST http://localhost:8000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Manufacturer": "Toyota",
+    "Model": "Corolla",
+    "Fuel type": "Petrol",
+    "Engine size": 1.8,
+    "Year of manufacture": 2018,
+    "Mileage": 45000
+  }'
+```
+
+### Run Frontend Locally
+
+```bash
+cd streamlit-car-price
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+Application opens at `http://localhost:8501`
+
+## Common Issues and Solutions
+
+### Model Binary Incompatibility
+
+**Problem**: `ModuleNotFoundError: No module named 'numpy._core'`
+
+**Cause**: Model was pickled with different library versions than deployment environment
+
+**Solution**: Use unpinned dependencies and let package manager resolve compatibility
+
+### API Response Field Mismatch
+
+**Problem**: Frontend shows "No prediction returned"
+
+**Cause**: API returns `predicted_price_gbp` but frontend expects `predicted_price`
+
+**Solution**: Always test API responses manually before writing integration code:
+```bash
+curl -X POST <api-url>/predict -H "Content-Type: application/json" -d '{...}'
+```
+
+### Docker Layer Caching
+
+**Problem**: Long rebuild times when only code changes
+
+**Solution**: Order Dockerfile commands from least to most frequently changed:
+1. Install dependencies (changes rarely)
+2. Copy model file (changes rarely)
+3. Copy source code (changes frequently)
+
+## API Documentation
+
+Interactive API documentation available at:
+- Swagger UI: `https://car-price-api-v1.onrender.com/docs`
+- ReDoc: `https://car-price-api-v1.onrender.com/redoc`
+
+### Prediction Endpoint
+
+**POST** `/predict`
+
+Request body:
+```json
+{
+  "Manufacturer": "string",
+  "Model": "string",
+  "Fuel type": "string",
+  "Engine size": "number",
+  "Year of manufacture": "integer",
+  "Mileage": "integer"
+}
+```
+
+Response:
+```json
+{
+  "predicted_price_gbp": "number"
+}
+```
+
+## Learning Outcomes
+
+This project demonstrates:
+- Docker containerization with optimization techniques
+- RESTful API design with FastAPI
+- Cloud deployment on multiple platforms
+- Integration debugging between services
+- Dependency management trade-offs
+- Monorepo project structure
+- Production considerations (health checks, cold starts, caching)
+
+## Next Steps
+
+Potential enhancements for production readiness:
+- Add request logging and monitoring
+- Implement model versioning (A/B testing)
+- Add input validation with meaningful error messages
+- Set up CI/CD pipeline with GitHub Actions
+- Store predictions in database for analysis
+- Add authentication and rate limiting
+
+## Requirements
+
+- Docker and Docker Hub account (for API deployment)
+- Render account (for API hosting)
+- GitHub account (for code hosting)
+- Streamlit Community Cloud account (for frontend hosting)
+
+## License
+
+MIT
