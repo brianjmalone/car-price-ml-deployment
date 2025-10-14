@@ -45,7 +45,7 @@ if st.button("Predict Price"):
             response.raise_for_status()
             
             result = response.json()
-            predicted_price = result.get("predicted_price")
+            predicted_price = result.get("predicted_price_gbp")
             
             if predicted_price:
                 st.success(f"## Predicted Price: ${predicted_price:,.2f}")
