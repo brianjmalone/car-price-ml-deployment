@@ -8,15 +8,21 @@ st.title("Car Price Predictor")
 st.warning("⏳ First request may take 30-50 seconds (free tier cold start)")
 
 # Dropdowns
-manufacturer = st.selectbox(
-    "Manufacturer",
-    ["Toyota", "Honda", "BMW", "Ford", "Tesla"]
+make_model_options = [
+    "Toyota Corolla",
+    "Honda Civic",
+    "BMW 3 Series",
+    "Ford F-150",
+    "Tesla Model 3"
+]
+
+make_model = st.selectbox(
+    "Make and Model",
+    make_model_options
 )
 
-model = st.selectbox(
-    "Model", 
-    ["Corolla", "Civic", "3 Series", "F-150", "Model 3"]
-)
+# Split into manufacturer and model
+manufacturer, model = make_model.split(" ", 1)
 
 fuel_type = st.selectbox(
     "Fuel Type",
@@ -26,7 +32,7 @@ fuel_type = st.selectbox(
 # Number inputs
 engine_size = st.number_input("Engine Size (L)", min_value=1.0, max_value=6.0, value=2.0, step=0.1)
 year = st.number_input("Year of Manufacture", min_value=2010, max_value=2024, value=2020, step=1)
-mileage = st.number_input("Mileage", min_value=0, max_value=200000, value=30000, step=1000)
+mileage = st.number_input("Mileage", min_value=0, max_value=200000, value=30000, step=1)
 
 # Predict button
 if st.button("Predict Price"):
@@ -48,7 +54,7 @@ if st.button("Predict Price"):
             predicted_price = result.get("predicted_price_gbp")
             
             if predicted_price:
-                st.success(f"## Predicted Price: ${predicted_price:,.2f}")
+                st.success(f"## Predicted Price: £{predicted_price:,.2f}")
             else:
                 st.error("No prediction returned")
                 
